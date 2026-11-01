@@ -1,38 +1,14 @@
----
-import { getCollection } from 'astro:content';
-import Base from '../layouts/Base.astro';
-import PostCard from '../components/PostCard.astro';
-const posts = (await getCollection('posts', ({ data }) => !data.draft)).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf() || a.id.localeCompare(b.id));
-const categories = [...new Set(posts.map(p => p.data.category))];
----
-<Base>
-  <section class="intro container" id="top">
-    <p class="eyebrow">LEARNING IN PUBLIC</p>
-    <h1>把想明白的，<br class="mobile-break" />慢慢写下来<span>。</span></h1>
-    <p class="intro-description">关于机器学习、强化学习与生成模型。<br />从一个问题出发，把公式、代码和直觉连起来。</p>
-    <div class="intro-note"><span aria-hidden="true">↳</span> Notes on models, code & everything in between.</div>
-  </section>
-  <section class="posts-section container" aria-label="文章列表">
-    <div class="posts-toolbar">
-      <div class="filters" role="group" aria-label="按主题筛选">
-        <button type="button" class="filter active" data-filter="all" aria-pressed="true">全部文章 <span>{posts.length}</span></button>
-        {categories.map(category => <button type="button" class="filter" data-filter={category} aria-pressed="false">{category}</button>)}
-      </div>
-      <span class="toolbar-label">从最近的开始 ↓</span>
-    </div>
-    <p class="sr-only" id="filter-status" aria-live="polite"></p>
-    <div class="posts-grid">{posts.map(post => <PostCard post={post} />)}</div>
-  </section>
-  <script>
-    const buttons = document.querySelectorAll<HTMLButtonElement>('[data-filter]');
-    const cards = document.querySelectorAll<HTMLElement>('[data-category]');
-    buttons.forEach(button => button.addEventListener('click', () => {
-      const filter = button.dataset.filter;
-      buttons.forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); });
-      let count = 0;
-      cards.forEach(card => { card.hidden = filter !== 'all' && card.dataset.category !== filter; if (!card.hidden) count++; });
-      const status = document.querySelector('#filter-status');
-      if (status) status.textContent = `显示 ${count} 篇文章`;
-    }));
-  </script>
-</Base>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>learning</title>
+    <style>
+      body { margin: 0; background: #fff; color: #222; font-family: Georgia, serif; }
+      main { max-width: 1120px; margin: 0 auto; padding: 48px 28px; }
+      h1 { margin: 0; font-size: 28px; font-weight: 400; }
+    </style>
+  </head>
+  <body><main><h1>learning</h1></main></body>
+</html>
