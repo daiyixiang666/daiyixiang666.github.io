@@ -226,7 +226,7 @@ $$
 
 The gradient predicts the first-order effect of a step. By itself, it does not specify a movement budget. If we minimize the linear expression without any restriction, then for $g\ne0$, choosing $\Delta=-t g$ sends it to $-\infty$ as $t$ grows. That does not mean the actual loss keeps decreasing.
 
-One way to complete the local problem is to choose a norm and a radius $r>0$:
+A movement budget makes this local optimization problem well-defined. One way to impose that budget is to choose a norm and a radius $r>0$:
 
 $$
 \Delta^\star\in\underset{\|\Delta\|_p\leq r}{\operatorname{argmin}}\;g^\top\Delta.
