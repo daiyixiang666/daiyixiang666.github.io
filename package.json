@@ -9,6 +9,13 @@
     "preview": "astro preview --host 127.0.0.1"
   },
   "dependencies": {
-    "astro": "7.4.4"
+    "@astrojs/markdown-remark": "^7.3.5",
+    "astro": "7.4.4",
+    "katex": "^0.19.1",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0"
+  },
+  "overrides": {
+    "katex": "$katex"
   }
 }

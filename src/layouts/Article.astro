@@ -1,0 +1,32 @@
+---
+import '../styles/article.css';
+import 'katex/dist/katex.min.css';
+interface Props { title: string; description: string; headings: {depth: number; slug: string; text: string}[]; }
+const { title, description, headings } = Astro.props;
+const sections = headings.filter(h => h.depth === 2);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · learning</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+  </head>
+  <body>
+    <a class="skip" href="#article">Skip to article</a>
+    <header class="site-top"><a class="brand" href="/">learning</a></header>
+    <main class="article-wrap">
+      <header class="article-header"><h1>{title}</h1><p class="subtitle">{description}</p></header>
+      <div class="article-grid">
+        <article class="prose" id="article"><slot /></article>
+        <details class="toc" open>
+          <summary>ON THIS PAGE</summary>
+          <nav aria-label="Table of contents">{sections.map(h => <a href={`#${h.slug}`}>{h.text}</a>)}</nav>
+        </details>
+      </div>
+      <footer class="article-footer"><a href="/">← learning</a></footer>
+    </main>
+  </body>
+</html>

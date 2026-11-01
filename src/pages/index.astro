@@ -1,14 +1,20 @@
+---
+import '../styles/article.css';
+---
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>learning</title>
-    <style>
-      body { margin: 0; background: #fff; color: #222; font-family: Georgia, serif; }
-      main { max-width: 1120px; margin: 0 auto; padding: 48px 28px; }
-      h1 { margin: 0; font-size: 28px; font-weight: 400; }
-    </style>
   </head>
-  <body><main><h1>learning</h1></main></body>
+  <body>
+    <header class="site-top"><h1 class="brand" style="margin:0">learning</h1></header>
+    <main class="home-main">
+      <article class="home-entry">
+        <a href="/posts/understanding-optimizers-through-norms/">Understanding Optimizers Through Norms</a>
+        <p>Vector norms, matrix norms, and what it means to take the steepest step.</p>
+      </article>
+    </main>
+  </body>
 </html>

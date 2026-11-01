@@ -1,0 +1,6 @@
+---
+import Article from '../../layouts/Article.astro';
+import { Content, frontmatter, getHeadings } from '../../content/norms.md';
+const headings = getHeadings();
+---
+<Article title={frontmatter.title} description={frontmatter.description} headings={headings}><Content /></Article>
