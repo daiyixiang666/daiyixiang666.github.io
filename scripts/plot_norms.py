@@ -87,4 +87,56 @@ for mobile in [False,True]:
         ax.set_title(rf'$\|\Delta\|_{{{label}}}\leq1$',color=c,pad=17)
         ax.text(.5,-.23,rf'$\Delta=({d[0]:g}, {d[1]:g}),\quad g^\top\Delta={value:g}$',ha='center',transform=ax.transAxes,fontsize=11,color=c)
     save(fig,'steepest-steps-mobile' if mobile else 'steepest-steps')
-print('Generated eight SVGs (four figures with mobile variants).')
+
+
+# Frozen-state geometry: these are norm balls, not training trajectories.
+m = np.array([3., 4.])
+D = np.diag([9., 4.])
+weighted_step = -np.linalg.solve(D, m) / np.sqrt(m @ np.linalg.solve(D, m))
+assert np.isclose(weighted_step @ D @ weighted_step, 1.)
+for mobile in [False, True]:
+    fig, axes = plt.subplots(2 if mobile else 1, 1 if mobile else 2,
+                             figsize=(5.3, 9.5) if mobile else (10.8, 4.5), layout='constrained')
+    for ax, weighted, color in zip(axes, [False, True], [TEAL, BLUE]):
+        plane(ax, 1.35, xlabel='$\\Delta_1$', ylabel='$\\Delta_2$')
+        curve = np.vstack([np.cos(t), np.sin(t)])
+        if weighted:
+            curve = np.diag([1/3, 1/2]) @ curve
+        ax.fill(*curve, color=color, alpha=.07, zorder=2)
+        ax.plot(*curve, color=color, lw=2.2, zorder=3)
+        step = weighted_step if weighted else -m / np.linalg.norm(m)
+        xx = np.linspace(-1.35, 1.35, 200)
+        for level in [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4]:
+            ax.plot(xx, (level-3*xx)/4, color=GRAY, alpha=.25, lw=.6, zorder=1)
+        ax.plot(xx, (m@step-3*xx)/4, color=color, lw=1.3, ls='--', zorder=3)
+        ax.arrow(0, 0, *step, color=color, width=.014, head_width=.08,
+                 length_includes_head=True, zorder=4)
+        ax.scatter(*step, color=color, s=30, zorder=5)
+        ax.set_title(r'$\Delta^\top D\Delta\leq1$' if weighted else r'$\|\Delta\|_2\leq1$',
+                     color=color, pad=17)
+        ax.text(.5, -.24, r'$D=\mathrm{diag}(9,4)$' if weighted else r'$D=I$',
+                ha='center', transform=ax.transAxes, fontsize=11, color=color)
+    save(fig, 'adam-geometry-mobile' if mobile else 'adam-geometry')
+
+H = np.diag([3., 1.])
+frob_step = -np.array([3., 1.]) / np.sqrt(10)
+spectral_step = -np.ones(2)
+for mobile in [False, True]:
+    fig, axes = plt.subplots(2 if mobile else 1, 1 if mobile else 2,
+                             figsize=(5.3, 9.5) if mobile else (10.8, 4.5), layout='constrained')
+    for ax, p, color, step, title in zip(axes, [2, np.inf], [TEAL, BLUE],
+            [frob_step, spectral_step], [r'Frobenius: $a^2+b^2\leq1$', r'Spectral: $\max(|a|,|b|)\leq1$']):
+        plane(ax, 1.45, xlabel='$a$', ylabel='$b$'); ball(ax, p, color)
+        xx = np.linspace(-1.45, 1.45, 200)
+        for level in [-4, -3, -2, -1, 0, 1, 2, 3, 4]:
+            ax.plot(xx, level-3*xx, color=GRAY, lw=.6, alpha=.3, zorder=1)
+        value = np.array([3., 1.]) @ step
+        ax.plot(xx, value-3*xx, color=color, lw=1.3, ls='--', zorder=3)
+        ax.arrow(0, 0, *step, color=color, width=.018, head_width=.1,
+                 length_includes_head=True, zorder=4)
+        ax.scatter(*step, color=color, s=30, zorder=5)
+        ax.set_title(title, color=color, fontsize=13, pad=17)
+        ax.text(.5, -.25, r'$(a,b)=(-3,-1)/\sqrt{10}$' if p == 2 else r'$(a,b)=(-1,-1)$',
+                ha='center', transform=ax.transAxes, fontsize=11, color=color)
+    save(fig, 'matrix-steps-mobile' if mobile else 'matrix-steps')
+print('Generated twelve SVGs (six figures with mobile variants).')
