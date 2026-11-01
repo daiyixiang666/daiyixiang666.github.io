@@ -1,0 +1,23 @@
+{
+  "name": "yixiang-notes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro build",
+    "preview": "astro preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.5",
+    "@astrojs/rss": "^4.0.0",
+    "@astrojs/sitemap": "^3.0.0",
+    "astro": "7.4.4",
+    "katex": "^0.19.1",
+    "rehype-katex": "^7.0.0",
+    "remark-math": "^6.0.0"
+  },
+  "overrides": {
+    "katex": "$katex"
+  }
+}

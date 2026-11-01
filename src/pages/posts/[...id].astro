@@ -1,0 +1,31 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import { formatDate, readingTime } from '../../site';
+export async function getStaticPaths() {
+  return (await getCollection('posts', ({ data }) => !data.draft)).map(post => ({ params: { id: post.id }, props: { post } }));
+}
+const { post } = Astro.props;
+const { Content, headings } = await render(post);
+const toc = headings.filter(h => h.depth === 2);
+---
+<Base title={post.data.title} description={post.data.description} image={post.data.cover} type="article">
+  <div class="article-shell container" id="top">
+    <a href="/" class="back-link">← 所有文章</a>
+    <header class="article-header">
+      <p class="eyebrow">{post.data.category}</p>
+      <h1>{post.data.title}</h1>
+      <p class="article-description">{post.data.description}</p>
+      <div class="post-meta"><span>Yixiang</span><span>·</span><time datetime={post.data.date.toISOString()}>{formatDate(post.data.date)}</time><span>·</span><span>{readingTime(post.body)} 分钟阅读</span></div>
+    </header>
+    <img class="article-cover" src={post.data.cover} alt={post.data.coverAlt} width="1080" height="440" />
+    <div class="article-body">
+      <div class="article-content">
+        {post.data.sample && <aside class="sample-notice">示例文章 · 用于展示博客的文章排版，可以替换为你自己的内容。</aside>}
+        <div class="prose"><Content /></div>
+        <div class="article-end"><span>写到这里，下次继续。</span><a href="/">← 返回文章列表</a></div>
+      </div>
+      {toc.length > 0 && <aside class="toc" aria-label="文章目录"><p>本篇目录</p><nav>{toc.map(h => <a href={`#${h.slug}`}>{h.text}</a>)}</nav></aside>}
+    </div>
+  </div>
+</Base>

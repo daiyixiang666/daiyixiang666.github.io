@@ -1,0 +1,18 @@
+---
+import Base from '../layouts/Base.astro';
+import { site } from '../site';
+---
+<Base title="关于">
+  <section class="about-page container" id="top">
+    <p class="eyebrow">BEHIND THE NOTES</p>
+    <h1>你好，我是 Yixiang<span>。</span></h1>
+    <div class="prose">
+      <p class="about-lead">这里用来记录学习机器学习、强化学习和生成模型时，值得留下的问题。</p>
+      <p>一个公式为什么这样写？一段代码对应哪一步推导？一个看似合理的解释，放到小例子里还成立吗？这些问题，适合慢慢写。</p>
+      <h2>这里会写什么</h2>
+      <ul><li><strong>模型与直觉</strong>：从具体例子理解公式和假设。</li><li><strong>强化学习</strong>：目标函数、算法实现与实验中的问题。</li><li><strong>生成模型</strong>：VAE、扩散模型，以及它们背后的概率视角。</li></ul>
+      <h2>保持联系</h2>
+      <p>代码可以在 <a href={site.github}>GitHub ↗</a> 找到，也可以通过 <a href="/rss.xml">RSS</a> 订阅文章更新。</p>
+    </div>
+  </section>
+</Base>
