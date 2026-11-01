@@ -28,5 +28,45 @@ const sections = headings.filter(h => h.depth === 2);
       </div>
       <footer class="article-footer"><a href="/">← learning</a></footer>
     </main>
+    <script>
+      const article = document.querySelector('#article');
+      const headings = Array.from(document.querySelectorAll<HTMLElement>('#article h2[id]'));
+      const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('.toc nav a'));
+      let pending = false;
+
+      function updateCurrentSection() {
+        pending = false;
+        if (!headings.length) return;
+        let current = headings[0];
+        for (const heading of headings) {
+          if (heading.getBoundingClientRect().top > 100) break;
+          current = heading;
+        }
+        if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) {
+          current = headings[headings.length - 1];
+        }
+        for (const link of links) {
+          if (decodeURIComponent(link.hash.slice(1)) === current.id) {
+            link.setAttribute('aria-current', 'location');
+          } else {
+            link.removeAttribute('aria-current');
+          }
+        }
+      }
+
+      function scheduleUpdate() {
+        if (pending) return;
+        pending = true;
+        requestAnimationFrame(updateCurrentSection);
+      }
+
+      window.addEventListener('scroll', scheduleUpdate, { passive: true });
+      window.addEventListener('resize', scheduleUpdate);
+      window.addEventListener('hashchange', scheduleUpdate);
+      window.addEventListener('load', scheduleUpdate);
+      article?.addEventListener('load', scheduleUpdate, true);
+      document.fonts.ready.then(scheduleUpdate);
+      updateCurrentSection();
+    </script>
   </body>
 </html>
