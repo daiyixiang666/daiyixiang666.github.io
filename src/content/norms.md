@@ -281,134 +281,126 @@ For $g=(3,4)^\top$ and $r=1$, the best linear changes are $-4$, $-5$, and $-7$. 
 
 The norms in the last column are called **dual norms**. They measure how large the gradient's linear effect can be on a unit ball. That is why $L_1$ pairs with $L_\infty$, while $L_2$ pairs with itself. These are local linear problems, as in the steepest-descent treatment in [Boyd and Vandenberghe, §9.4](https://web.stanford.edu/~boyd/cvxbook/bv_cvxbook.pdf).
 
-## 6. SGD: a squared Euclidean movement cost
+## 6. Define the descent problem first
 
-The $L_2$-constrained solution is $-rg/\|g\|_2$. Ordinary gradient descent instead uses $-\eta g$. The two share a direction, but the latter's length is $\eta\|g\|_2$, which changes with the gradient.
+The training objective is to minimize a loss $\mathcal L(\Theta)$ over parameters $\Theta$. At the current parameters $\Theta_{t-1}$, we choose an increment $\Delta$ and set $\Theta_t=\Theta_{t-1}+\Delta$.
 
-A squared movement penalty gives exactly the ordinary gradient step:
+For a differentiable loss, the current gradient $G_t=\nabla\mathcal L(\Theta_{t-1})$ gives the local model
+
+$$
+\mathcal L(\Theta_{t-1}+\Delta)
+\approx\mathcal L(\Theta_{t-1})+\langle G_t,\Delta\rangle.
+$$
+
+The pairing is a dot product for vectors and the Frobenius inner product for matrices. Since the first term does not depend on $\Delta$, the local descent problem is to make $\langle G_t,\Delta\rangle$ small while controlling the size of the move.
+
+### Complete the problem with a movement rule
+
+Let $\rho_t(\Delta)$ be our chosen norm of the increment. Two ways to complete the local problem are
+
+$$
+\boxed{\min_{\rho_t(\Delta)\leq r_t}\langle G_t,\Delta\rangle}
+$$
+
+and
+
+$$
+\boxed{\min_\Delta\left\{\langle G_t,\Delta\rangle
++\frac{1}{2\eta_t}\rho_t(\Delta)^2\right\}},
+\qquad \eta_t>0.
+$$
+
+The first imposes a hard radius $r_t$; the second makes large moves increasingly expensive. They need not produce the same step length. Choosing a norm specifies the geometry, while the radius or penalty coefficient determines how that geometry is used to size a step.
+
+We can also use a historical gradient estimate instead of the current gradient. Write the chosen linear signal as $S_t$. This gives a common template:
+
+$$
+\min_\Delta\bigl\{\langle S_t,\Delta\rangle
++\text{movement cost or constraint}\bigr\}.
+$$
+
+To compare geometries, first **hold $S_t$ fixed and change only the norm**. After solving those local problems, we can specify how an optimizer constructs $S_t$ and its movement rule. A norm alone does not determine a complete optimizer.
+
+## 7. Change the norm, compare the resulting steps
+
+The three choices below answer the same question: given a linear signal, which increment gives the greatest predicted improvement for the permitted movement?
+
+### Choice 1: Euclidean or Frobenius movement
+
+For a vector signal $s$, use $\rho(\Delta)=\|\Delta\|_2$. Under a hard radius, Section 5 gave the normalized step $-rs/\|s\|_2$ for $s\ne0$. With a squared movement cost, we instead solve
 
 $$
 \Delta^\star
 =\underset{\Delta}{\operatorname{argmin}}\left\{
- g^\top\Delta+\frac{1}{2\eta}\|\Delta\|_2^2
-\right\}
-=-\eta g,\qquad \eta>0.
+ s^\top\Delta+\frac{1}{2\eta}\|\Delta\|_2^2
+\right\}.
 $$
 
-Differentiate with respect to $\Delta$: $g+\Delta/\eta=0$. The positive quadratic penalty makes this the unique minimum. A hard radius and a movement penalty are two ways to control a step; their numerical parameters have different meanings.
-
-At training step $t$, let $w_{t-1}$ be the parameters before the update and $g_t=\nabla\mathcal L_t(w_{t-1})$ the gradient of the current minibatch loss. Using that stochastic gradient in the same local problem gives **SGD without momentum or weight decay**:
+Differentiation gives $s+\Delta/\eta=0$, hence
 
 $$
-w_t=w_{t-1}-\eta_t g_t.
+\boxed{\Delta^\star=-\eta s.}
 $$
 
-The stochastic part concerns how the gradient is estimated. The Euclidean movement cost explains how that estimate is turned into a step. With a matrix parameter and gradient $G_t$, the analogous cost is $\|\Delta W\|_F^2/(2\eta_t)$, and the update is $\Delta W=-\eta_tG_t$.
-
-This separates two choices: which information to use, and how to measure the cost of moving. Adam changes both.
-
-## 7. Adam: a changing, coordinate-weighted L2 geometry
-
-Gradient coordinates can have very different scales, and a single gradient can fluctuate. Adam keeps a signed average of recent gradients and a separate average of their squares. With zero initialization, its state is
+Every coordinate pays the same squared-movement price. For a matrix signal $S$, the corresponding norm is Frobenius:
 
 $$
-\begin{aligned}
-m_t&=\beta_1m_{t-1}+(1-\beta_1)g_t,\\
-v_t&=\beta_2v_{t-1}+(1-\beta_2)g_t^{\odot2},
-\end{aligned}
-\qquad m_0=v_0=0.
+\underset{\Delta}{\operatorname{argmin}}\left\{
+\langle S,\Delta\rangle_F+\frac{1}{2\eta}\|\Delta\|_F^2\right\}
+=-\eta S.
 $$
 
-The square is elementwise, and $0\leq\beta_1,\beta_2<1$. The first average can cancel positive and negative gradients; the second records their squared magnitudes. It is a second raw moment, not a variance.
+This is the geometry obtained by treating all parameter entries as one Euclidean vector. The hard-radius version has a fixed norm $r$; the penalized step has norm $\eta\|s\|_2$, or $\eta\|S\|_F$ for a matrix. Their directions agree, but their lengths follow different rules.
 
-Because the averages start at zero, the observed gradients initially have weights summing to less than one. Divide by those weight sums:
+### Choice 2: a coordinate-weighted L2 norm
 
-$$
-\widehat m_t=\frac{m_t}{1-\beta_1^t},\qquad
-\widehat v_t=\frac{v_t}{1-\beta_2^t}.
-$$
-
-The coordinate update is
+Now change the movement norm. Let $D_t$ be a positive diagonal matrix, held fixed during the local minimization, and define
 
 $$
-\Delta_{t,i}=-\eta_t\frac{\widehat m_{t,i}}{\sqrt{\widehat v_{t,i}}+\varepsilon},
-\qquad \varepsilon>0.
+\rho_t(\Delta)=\|\Delta\|_{D_t}
+:=\sqrt{\Delta^\top D_t\Delta}.
 $$
 
-These are the standard Adam recurrences in [Kingma and Ba, Algorithm 1](https://arxiv.org/abs/1412.6980). Here we consider Adam without weight decay.
-
-### Read the denominator as a movement cost
-
-Freeze the state for this step and define the positive diagonal matrix
+The Euclidean ball becomes an ellipsoid. A larger diagonal entry of $D_t$ makes movement in that coordinate more expensive. Keep the same kind of linear objective and quadratic penalty:
 
 $$
-D_t=\operatorname{diag}\left(\sqrt{\widehat v_{t,1}}+\varepsilon,\ldots,
-\sqrt{\widehat v_{t,d}}+\varepsilon\right).
-$$
-
-It defines a weighted Euclidean norm:
-
-$$
-\|\Delta\|_{D_t}:=\sqrt{\Delta^\top D_t\Delta}.
-$$
-
-Replace SGD's squared Euclidean cost with this squared norm, and replace the current gradient with the signed historical average:
-
-$$
-\begin{aligned}
 \Delta_t
-&=\underset{\Delta}{\operatorname{argmin}}\left\{
-\widehat m_t^\top\Delta+\frac{1}{2\eta_t}\|\Delta\|_{D_t}^2\right\}\\
-&=-\eta_tD_t^{-1}\widehat m_t.
-\end{aligned}
+=\underset{\Delta}{\operatorname{argmin}}\left\{
+ s_t^\top\Delta+\frac{1}{2\eta_t}\Delta^\top D_t\Delta\right\}.
 $$
 
-The derivative is $\widehat m_t+D_t\Delta/\eta_t$. Setting it to zero recovers Adam exactly. A larger diagonal entry of $D_t$ makes movement in that coordinate more expensive.
+Its derivative is $s_t+D_t\Delta/\eta_t$, so
 
-For example, with frozen $\widehat m_t=(3,4)^\top$, $D_t=\operatorname{diag}(9,4)$, and $\eta_t=0.1$,
+$$
+\boxed{\Delta_t=-\eta_tD_t^{-1}s_t.}
+$$
+
+We have not yet said how $D_t$ or $s_t$ should be chosen. This result only says what update follows from a given positive diagonal movement cost and a given linear signal.
+
+For $s_t=(3,4)^\top$, $D_t=\operatorname{diag}(9,4)$, and $\eta_t=0.1$,
 
 $$
 \Delta_t=-0.1\begin{pmatrix}3/9\\4/4\end{pmatrix}
 =\begin{pmatrix}-1/30\\-0.1\end{pmatrix}.
 $$
 
-The step is not parallel to $-(3,4)^\top$: the two coordinates pay different movement costs.
+The Euclidean choice with the same signal and penalty coefficient would give $(-0.3,-0.4)^\top$. Changing the norm changes both the direction and the amount assigned to each coordinate.
 
 <figure>
 <picture><source media="(max-width: 560px)" srcset="/figures/adam-geometry-mobile.svg" /><img src="/figures/adam-geometry.svg" alt="For a fixed linear signal (3,4), a Euclidean unit ball is a circle and the weighted ball with D equal to diag(9,4) is an ellipse. Their optimal arrows point in different directions." width="1080" height="480" loading="lazy" /></picture>
-<figcaption>Figure 5. Same linear signal, different movement costs. Arrows minimize the linear objective over each pictured unit ball. These balls visualize cost contours; Adam itself uses the quadratic penalty above, rather than imposing a fixed unit radius.</figcaption>
+<figcaption>Figure 5. Same linear signal, different movement norms. Arrows minimize the linear objective over each pictured unit ball. These balls visualize cost contours; the penalized update above does not impose a fixed unit radius.</figcaption>
 </figure>
 
-### Why this is not simply a sign update
+### Choice 3: the matrix spectral norm
 
-On the first step, bias correction gives $\widehat m_1=g_1$ and $\widehat v_1=g_1^{\odot2}$. Thus, for a coordinate whose gradient magnitude is much larger than $\varepsilon$, the first update is approximately $-\eta_1\operatorname{sign}(g_{1,i})$.
-
-Later, the numerator and denominator summarize gradient histories. In general the numerator is not the current gradient, and the denominator is not its absolute value. Adam is therefore not simply the $L_\infty$-constrained rule from Section 5.
-
-The weighted-norm interpretation is exact **with the historical state held fixed**. It does not say that $D_t$ is the true loss Hessian, or that Adam is steepest descent on the current loss under a fixed norm. Momentum can even point against the current gradient.
-
-## 8. Muon: from a spectral budget to a matrix update
-
-Adam measures each coordinate separately. A matrix parameter also has an input-output structure. For a linear layer $y=Wx$, holding $x$ fixed gives
+A matrix can also be measured by its action on inputs. For a linear layer $y=Wx$, holding $x$ fixed gives
 
 $$
 \Delta y=(\Delta W)x,\qquad
 \|\Delta y\|_2\leq\|\Delta W\|_2\|x\|_2.
 $$
 
-A spectral-norm budget on $\Delta W$ controls the largest output change per unit input. This motivates a matrix version of the local problem.
-
-### Keep the linear objective; change the budget
-
-Let $G=\nabla_W\mathcal L$ have the same shape as $W$. The first-order pairing is
-
-$$
-\langle G,\Delta W\rangle_F
-=\sum_{i,j}G_{ij}(\Delta W)_{ij}
-=\operatorname{tr}(G^\top\Delta W).
-$$
-
-The Frobenius inner product adds up the first-order effects of the entries. Its subscript does not force us to use Frobenius to constrain the update. Compare these two problems:
+This suggests a different movement rule: bound the largest output change per unit input, using $\rho(\Delta W)=\|\Delta W\|_2$. To isolate its effect, keep a fixed matrix signal $G$ and compare two hard-radius problems:
 
 $$
 \begin{array}{ll}
@@ -419,9 +411,9 @@ $$
 \end{array}
 $$
 
-Here $G\ne0$, and $G=U\Sigma V^\top$ is a compact SVD retaining only its nonzero singular values. The first result is the vector $L_2$ argument applied to all entries. The second needs a matrix argument.
+Here $G\ne0$, and $G=U\Sigma V^\top$ is a compact SVD retaining only its nonzero singular values. The first result is the vector $L_2$ argument applied to all entries. For the second, write $G=\sum_{i=1}^{q}\sigma_i u_iv_i^\top$, where $q=\operatorname{rank}(G)$.
 
-Write $G=\sum_{i=1}^{q}\sigma_i u_iv_i^\top$, where $q=\operatorname{rank}(G)$. For any spectral-feasible increment,
+Under the spectral constraint, each $v_i$ and $u_i$ has unit Euclidean length, so $u_i^\top\Delta Wv_i\geq-r$. Therefore
 
 $$
 \langle G,\Delta W\rangle_F
@@ -429,13 +421,9 @@ $$
 \geq-r\sum_i\sigma_i.
 $$
 
-Each $u_i,v_i$ is a unit vector, and $\|\Delta W\|_2\leq r$, so each scalar $u_i^\top\Delta Wv_i$ is at least $-r$. The choice $\Delta W=-rUV^\top$ maps each $v_i$ to $-ru_i$, satisfying the budget and attaining all those lower bounds simultaneously.
+The choice $\Delta W=-rUV^\top$ has spectral norm $r$ and maps every $v_i$ to $-ru_i$. It attains the bound, proving the claimed optimum. The best linear value is $-r\|G\|_*$, where $\|G\|_*:=\sum_i\sigma_i$ is the nuclear norm, dual to the spectral norm under the Frobenius pairing. If $G=0$, choose zero; for rank-deficient $G$, the optimum need not be unique.
 
-Thus $-rUV^\top$ is an optimal increment. The best linear change is $-r\|G\|_*$, where $\|G\|_*:=\sum_i\sigma_i$ is the **nuclear norm**, the dual of the spectral norm under this pairing. If $G=0$, choose zero; for a rank-deficient $G$, the optimum need not be unique.
-
-### What changed in the update?
-
-The gradient is $U\Sigma V^\top$. The ideal spectral-budget direction is $UV^\top$: it keeps the singular directions and replaces each nonzero singular value by one. This is a matrix operation, not an elementwise sign.
+The update retains the singular directions but replaces every nonzero singular value by the same magnitude $r$. In contrast, the Frobenius solution scales all the original singular values by a common factor and preserves their relative sizes.
 
 For $G=\operatorname{diag}(3,1)$ and radius one,
 
@@ -445,47 +433,126 @@ $$
 \Delta W_2=-I_2.
 $$
 
-The Frobenius budget shares a total squared-entry budget; the spectral budget permits a unit change along both orthogonal singular directions.
-
 <figure>
 <picture><source media="(max-width: 560px)" srcset="/figures/matrix-steps-mobile.svg" /><img src="/figures/matrix-steps.svg" alt="On the diagonal update slice diag(a,b), gradient diag(3,1) gives the Frobenius optimum (-3,-1) divided by square root of ten, and the spectral optimum (-1,-1)." width="1080" height="480" loading="lazy" /></picture>
-<figcaption>Figure 6. Matrix updates on the diagonal slice ΔW = diag(a,b), with G = diag(3,1). Lines are level sets of 3a + b. The spectral-feasible update has Frobenius length square root of two, so the two optima do not use an identical Euclidean budget.</figcaption>
+<figcaption>Figure 6. Same matrix signal and radius, different norms. On the diagonal slice ΔW = diag(a,b), the Frobenius budget shares a squared-entry budget, while the spectral budget permits a unit change in each singular direction. Their Euclidean movement budgets are different.</figcaption>
 </figure>
 
-### From the exact direction to practical Muon
+The inner product has stayed the same in both problems:
 
-The $UV^\top$ direction is the geometric core connecting this calculation to Muon. In practice, Muon orthogonalizes a momentum-based update and uses a short Newton–Schulz iteration to approximate that operation; see [Keller Jordan's original description](https://kellerjordan.github.io/posts/muon/).
+$$
+\langle G,\Delta W\rangle_F
+=\sum_{i,j}G_{ij}(\Delta W)_{ij}
+=\operatorname{tr}(G^\top\Delta W).
+$$
 
-A schematic momentum version is
+It describes the first-order effect on loss. The norm specifies which moves we compare. A Frobenius inner product does not require a Frobenius movement budget.
+
+## 8. From those norm choices to SGD, Adam, and Muon
+
+We now have three update rules derived from three movement geometries. To identify actual optimizers, we still need to specify their linear signals, how their norm or state is chosen, and how a step is sized.
+
+### Euclidean cost + a stochastic gradient: SGD
+
+<div class="section-alias" id="6-sgd-a-squared-euclidean-movement-cost"></div>
+
+At step $t$, take $s_t=g_t=\nabla\mathcal L_t(w_{t-1})$, the gradient of the current minibatch loss. Use the squared Euclidean movement cost from Choice 1:
+
+$$
+\Delta_t=-\eta_tg_t,\qquad
+w_t=w_{t-1}+\Delta_t.
+$$
+
+This is **SGD without momentum or weight decay**. For matrix parameters, use the Frobenius norm and obtain $\Delta W_t=-\eta_tG_t$. The stochastic part concerns how we estimate the gradient; the Euclidean or Frobenius cost explains how that estimate becomes an increment.
+
+### Weighted L2 cost + historical statistics: Adam
+
+<div class="section-alias" id="7-adam-a-changing-coordinate-weighted-l2-geometry"></div>
+
+Choice 2 gave $\Delta_t=-\eta_tD_t^{-1}s_t$ for any fixed positive diagonal $D_t$. Adam makes a particular choice of both $s_t$ and $D_t$ from gradient history.
+
+Starting at $m_0=v_0=0$, define
 
 $$
 \begin{aligned}
-B_t&=\mu B_{t-1}+(1-\mu)G_t,\qquad B_0=0,\\
-W_t&=(1-\eta_t\lambda)W_{t-1}
--\eta_t s_{m,n}\operatorname{Ortho}(B_t).
+m_t&=\beta_1m_{t-1}+(1-\beta_1)g_t,\\
+v_t&=\beta_2v_{t-1}+(1-\beta_2)g_t^{\odot2},
+\end{aligned}
+\qquad 0\leq\beta_1,\beta_2<1.
+$$
+
+The first average is signed; the second uses elementwise squares and records a second raw moment, not a variance. Correct the zero-initialization weight sums:
+
+$$
+\widehat m_t=\frac{m_t}{1-\beta_1^t},\qquad
+\widehat v_t=\frac{v_t}{1-\beta_2^t}.
+$$
+
+Now choose the linear signal and movement metric:
+
+$$
+\begin{aligned}
+s_t&=\widehat m_t,\\
+D_t&=\operatorname{diag}\left(\sqrt{\widehat v_{t,1}}+\varepsilon,\ldots,
+\sqrt{\widehat v_{t,d}}+\varepsilon\right),\qquad\varepsilon>0.
 \end{aligned}
 $$
 
-Here $0\leq\mu<1$ controls momentum, $\lambda\geq0$ is decoupled weight decay, and $s_{m,n}$ denotes an implementation-dependent shape scaling. Ideally, $\operatorname{Ortho}(B_t)$ returns the compact-SVD product $UV^\top$ for $B_t$; a finite numerical iteration need not return that product exactly.
+Substitute them into the weighted-norm solution from Choice 2. Coordinate by coordinate, it becomes
 
-Implementations may also use a Nesterov-style combination in place of $B_t$. Momentum, shape scaling, decay, and the approximation method are additional algorithm choices, not consequences forced by the spectral-ball minimization. The local problem explains a direction, rather than specifying every detail of a training recipe. Nor does orthogonalizing an update make the updated weight matrix itself orthogonal.
+$$
+\boxed{\Delta_{t,i}=-\eta_t
+\frac{\widehat m_{t,i}}{\sqrt{\widehat v_{t,i}}+\varepsilon}.}
+$$
 
-## 9. Put SGD, Adam, and Muon in the same picture
+This recovers Adam without weight decay; the historical statistics are the standard choices in [Kingma and Ba, Algorithm 1](https://arxiv.org/abs/1412.6980). The norm interpretation is exact with those statistics fixed during the local minimization. It does not imply that $D_t$ is the loss Hessian or that Adam uses a fixed norm throughout training.
 
-The common structure is a linear signal plus a rule for how much movement is allowed or how expensive it is:
+Adam is also not simply the $L_\infty$ sign rule from Section 5. Its first update is approximately sign-shaped when each nonzero gradient is large relative to $\varepsilon$, but later its numerator and denominator summarize histories. The signed average can even point against the current gradient.
+
+### Spectral budget + matrix momentum: Muon's core
+
+<div class="section-alias" id="8-muon-from-a-spectral-budget-to-a-matrix-update"></div>
+
+Choice 3 gave $-rUV^\top$ for a fixed matrix signal with compact SVD $U\Sigma V^\top$. Apply that operation to a matrix momentum signal:
+
+$$
+B_t=\mu B_{t-1}+(1-\mu)G_t,\qquad
+B_0=0,\quad0\leq\mu<1.
+$$
+
+If $B_t=U_t\Sigma_tV_t^\top$, the ideal spectral-budget solution is
+
+$$
+\boxed{\Delta W_t=-r_tU_tV_t^\top.}
+$$
+
+This is the geometric connection to Muon: the momentum matrix's singular directions are retained, while its nonzero singular values are replaced by one before applying a step scale. It is a matrix operation, not an elementwise sign.
+
+Practical Muon uses a short Newton–Schulz iteration to approximate this operation on a momentum-based update; see [Keller Jordan's original description](https://kellerjordan.github.io/posts/muon/). A schematic momentum version is
+
+$$
+W_t=(1-\eta_t\lambda)W_{t-1}
+-\eta_t s_{m,n}\operatorname{Ortho}(B_t).
+$$
+
+Here $\lambda\geq0$ is decoupled weight decay, $s_{m,n}$ is an implementation-dependent shape scaling, and ideally $\operatorname{Ortho}(B_t)=U_tV_t^\top$. In that idealization, the movement radius is $r_t=\eta_t s_{m,n}$ for a positive shape scale. A finite numerical iteration need not return the exact SVD product.
+
+Implementations may use a Nesterov-style combination instead of $B_t$. Momentum, shape scaling, decay, and numerical approximation are additional choices beyond the norm argument. The spectral problem explains the core direction; it does not uniquely specify every Muon implementation. Orthogonalizing an update also does not make the updated weight matrix itself orthogonal.
+
+### The same descent template, with different choices
+
+<div class="section-alias" id="9-put-sgd-adam-and-muon-in-the-same-picture"></div>
 
 <div class="table-scroll" role="region" aria-label="Optimizer geometry comparison" tabindex="0">
 
-| Method or idealized core | Linear signal | Movement rule | Resulting increment |
+| Norm and movement rule | Linear signal | Derived increment | Optimizer connection |
 | :--- | :--- | :--- | :--- |
-| Plain SGD | Current stochastic gradient $g_t$ | Squared Euclidean cost $\|\Delta\|_2^2/(2\eta_t)$ | $-\eta_tg_t$ |
-| Adam, with state fixed | Signed historical average $\widehat m_t$ | Squared weighted norm $\|\Delta\|_{D_t}^2/(2\eta_t)$ | $-\eta_tD_t^{-1}\widehat m_t$ |
-| Ideal Muon core | Matrix momentum signal $B_t=U\Sigma V^\top$ | Spectral budget $\|\Delta W\|_2\leq r$ | $-rUV^\top$ |
+| Euclidean or Frobenius, squared cost | Current stochastic gradient $g_t$ | $-\eta_tg_t$ | Plain SGD |
+| Coordinate-weighted $L_2$, squared cost | Historical average $\widehat m_t$, with Adam's $D_t$ | $-\eta_tD_t^{-1}\widehat m_t$ | Adam, with state fixed |
+| Matrix spectral norm, hard budget | Matrix momentum $B_t=U_t\Sigma_tV_t^\top$ | $-r_tU_tV_t^\top$ | Ideal Muon core |
 
 </div>
 
-For matrix SGD, replace the Euclidean vector cost by the Frobenius cost. The Muon row isolates the exact spectral direction before numerical approximation and the other recipe choices above. The table compares mathematical structures; it does not rank training performance or equate the methods' step sizes.
+The logic runs from **a local descent problem, to a choice of movement norm, to the resulting increment, and then to an optimizer's choices of signal and step size**. The three methods differ in their geometry, but also in how they construct the information that geometry acts on. The table compares those choices; it does not rank training performance or equate step sizes across different norms.
 
-Norms make the difference in movement rules explicit: Euclidean cost for SGD, a changing coordinate-weighted cost for Adam, and a matrix spectral budget for Muon's ideal direction. The information feeding those rules matters too: the current gradient and a historical average are not interchangeable.
-
-Finally, minimizing a linear prediction is a local calculation. A direction $d$ with $g^\top d<0$ decreases the same differentiable loss for sufficiently small positive steps, but a large step can still increase it. A minibatch gradient need not be a descent direction for the full-data loss, and historical momentum need not be a descent direction even for the current batch. Geometry explains a proposed step; it does not replace checking its finite-step behavior.
+Finally, this is a local calculation. A direction $d$ with $g^\top d<0$ decreases the same differentiable loss for sufficiently small positive steps, but a large step can still increase it. A minibatch gradient need not decrease the full-data loss, and historical momentum need not decrease the current batch loss. The norm argument explains a proposed update, while its finite-step behavior still needs to be checked.
