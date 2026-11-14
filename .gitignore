@@ -5,3 +5,10 @@ dist/
 .env
 .env.*
 !.env.example
+
+experiments/reward_noise_mnist/data/
+experiments/reward_noise_mnist/ckpt/*.pt
+experiments/reward_noise_mnist/ckpt/*.png
+experiments/reward_noise_mnist/runs/
+experiments/reward_noise_mnist/.venv/
+__pycache__/
