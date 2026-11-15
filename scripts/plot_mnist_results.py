@@ -135,18 +135,66 @@ for name, run in runs.items():
     peak, fin = acc.max(), acc[-5:].mean()
     if peak < 0.4:
         continue                      # never learned 3s (flipped / confused / no-signal runs)
-    pts.append((amp, fin / peak, name))
+    k = acc.argmax(); pts.append((amp, acc[k:].min() / peak, name))
+fu_pts = []
+for name, run in runs.items():
+    if not name.startswith('fu_A_raw'):
+        continue
+    L = run['log']
+    R = np.array([r['noisy_reward'] for r in L]); acc = np.array([r['oracle_acc'] for r in L])
+    c = 2 * R - 1
+    amp = np.sum(np.where(c < 0, np.log(np.abs(1 - np.minimum(c, 0))), 0) * 0.1 * 10)
+    k = acc.argmax(); fu_pts.append((amp, acc[k:].min() / acc[k], name))
 for mobile in [False, True]:
     fig, ax = plt.subplots(figsize=(5, 3.9) if mobile else (6.6, 3.7), layout='constrained')
     style(ax)
     for amp, ratio, name in pts:
-        col = RED if 'sym-0_0.3' in name else (GOLD if ratio < 0.95 else BLUE)
+        col = RED if 'sym-0_0.3' in name else BLUE
         ax.scatter(amp, ratio, color=col, s=40, zorder=3)
-    ax.scatter([], [], color=BLUE, label='healthy'); ax.scatter([], [], color=GOLD, label='stalled (FP=FN=0.3, seed 1)')
-    ax.scatter([], [], color=RED, label='FN = 0.3 (collapsed)')
+    for amp, ratio, name in fu_pts:
+        col = RED if ('sym-0_0.3' in name or 'sym-0_0.45' in name) else BLUE
+        ax.scatter(amp, ratio, facecolor='none', edgecolor=col, marker='^', s=50, lw=1.4, zorder=3)
+    ax.scatter([], [], facecolor='none', edgecolor=BLUE, marker='^', label='follow-up, healthy (not used to define the index)')
+    ax.scatter([], [], color=BLUE, label='main sweep, other noise');
+    ax.scatter([], [], color=RED, marker='^', facecolor='none', label='follow-up FN = 0.3 / 0.45')
+    ax.scatter([], [], color=RED, label='main sweep, FN = 0.3')
     ax.set_xlabel(r'cumulative amplification  $\sum_{c<0} 0.1\,\log|1-c|$')
-    ax.set_ylabel('final / peak share of 3s'); ax.set_ylim(0, 1.08)
-    ax.set_title('Raw-reward DiffusionNFT runs that learned 3s', fontsize=11)
-    ax.legend(frameon=False, fontsize=9, loc='lower left')
+    ax.set_ylabel('worst share of 3s after peak / peak'); ax.set_ylim(-0.03, 1.08)
+    ax.set_title('Raw-reward DiffusionNFT, β = 1', fontsize=11)
+    ax.legend(frameon=False, fontsize=8.5, loc='center right')
     save(fig, 'rn-mnist-amp-mobile' if mobile else 'rn-mnist-amp')
 print('wrote amplification figure')
+
+# ------------------------------------------------ figure 6: follow-up sweep (Section 8)
+def fu_mean(base, key):
+    ys = []
+    for s in (0, 1, 2):
+        L = runs[f'fu_{base}_s{s}']['log']
+        ys.append([r[key] for r in L])
+    it = [r['it'] for r in runs[f'fu_{base}_s0']['log']]
+    return np.array(it), np.array(ys)
+
+
+DOSE = [('A_raw_sym-0_0.1', TEAL, 'FN = 0.1'), ('A_raw_sym-0_0.2', GOLD, 'FN = 0.2'),
+        ('A_raw_sym-0_0.3', RED, 'FN = 0.3'), ('A_raw_sym-0_0.45', PURPLE, 'FN = 0.45')]
+FIX = [('A_raw_sym-0_0.3', RED, 'raw (β = 1)'), ('D_raw_beta0.3_sym-0_0.3', '#d9822b', 'raw, β = 0.3'),
+       ('D_raw_beta0.1_sym-0_0.3', '#6b2a24', 'raw, β = 0.1'), ('B_raw_neg0_sym-0_0.3', BLUE, 'negative branch off'),
+       ('C_center_sym-0_0.3', TEAL, 'group-centred r'), ('E_norm_sym-0_0.3', GRAY, 'normalised r')]
+for mobile in [False, True]:
+    fig, axes = plt.subplots(3 if mobile else 1, 1 if mobile else 3, figsize=(5, 12) if mobile else (14, 4.0),
+                             layout='constrained')
+    for ax, sets, key, title, ylab in [
+            (axes[0], DOSE, 'oracle_acc', 'Raw reward: FN dose', 'share of 3s'),
+            (axes[1], FIX, 'oracle_acc', 'FN = 0.3: interventions', 'share of 3s'),
+            (axes[2], FIX, 'blank_frac', 'FN = 0.3: blank images', 'fraction of blank samples')]:
+        style(ax)
+        for base, c, lab in sets:
+            it, ys = fu_mean(base, key)
+            for y in ys:
+                ax.plot(it, y, color=c, lw=.8, alpha=.3)
+            ax.plot(it, ys.mean(0), color=c, lw=2.1, label=lab)
+        ax.set_title(title); ax.set_xlabel('RL iteration'); ax.set_ylabel(ylab); ax.set_ylim(0, 1.03)
+    axes[0].legend(frameon=False, fontsize=9, loc='upper left')
+    axes[1].legend(frameon=False, fontsize=8.5, loc='upper left')
+    save(fig, 'rn-mnist-followup-mobile' if mobile else 'rn-mnist-followup')
+print('wrote follow-up figure')

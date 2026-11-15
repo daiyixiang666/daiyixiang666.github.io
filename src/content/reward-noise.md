@@ -308,13 +308,13 @@ FN lowers the ceiling on $\bar r$, so the model has to pass $p=0.71$ before trai
 To make this quantitative, sum the per-iteration amplification $\log|1-c|$ over all iterations with $c<0$. Weight each by the speed at which $\pi_{\text{old}}$ follows the model ($1-0.9$), using the logged mean reward:
 
 <figure>
-<picture><source media="(max-width: 560px)" srcset="/figures/rn-mnist-amp-mobile.svg" /><img src="/figures/rn-mnist-amp.svg" alt="Scatter of the cumulative error-amplification index against final over peak share of 3s for every raw-reward DiffusionNFT run. Healthy runs sit at an index of 3.3 or less with a ratio near 1. One stalled run is at 3.9. The two FN=0.3 runs are at about 10 with a ratio near 0.3." width="1000" height="560" loading="lazy" /></picture>
-<figcaption>Cumulative amplification index Σ<sub>c&lt;0</sub> 0.1·log|1−c| for every raw-reward DiffusionNFT run, computed from the logged mean reward. The index was defined after seeing the collapse, so this is a consistency check, not a test. Section 8 lists predictions for the follow-up runs.</figcaption>
+<picture><source media="(max-width: 560px)" srcset="/figures/rn-mnist-amp-mobile.svg" /><img src="/figures/rn-mnist-amp.svg" alt="Scatter of the cumulative error-amplification index against the worst drop after the peak. All runs that never blank out have an index below 5 and a ratio near 1. Every run with an index of 10 or more drops sharply: main-sweep FN=0.3 runs at about 10 drop to near zero, follow-up FN=0.3 runs at 20 to 24 drop to zero, and FN=0.45 runs at 21 to 24 drop to about half." width="1000" height="560" loading="lazy" /></picture>
+<figcaption>Cumulative amplification index Σ<sub>c&lt;0</sub> 0.1·log|1−c| against the deepest drop after the peak, for every raw-reward DiffusionNFT run with β = 1 that learned some 3s. Circles: the main sweep, used to define the index. Triangles: the follow-up sweep, run afterwards.</figcaption>
 </figure>
 
-Every healthy run has an index of at most 3.3. The one stalled run (FP = FN = 0.3, seed 1, stuck at 0.6) is at 3.9. Both collapsed runs are at about 10. The ordering is right, and the gap is large.
+In the main sweep, every healthy run has an index of at most 3.3, and both collapsed runs are at about 10. I defined the index after seeing those runs, so the real test is the follow-up sweep. There, all 12 raw-reward runs with clean reward, FP = 0.3, FN = 0.1 or FN = 0.2 stay below 4.7 and never collapse. All 6 runs with FN = 0.3 or 0.45 reach 20 or more and lose at least half their 3s.
 
-What this does not explain is *why the end state is a blank canvas*. The theory says errors grow, not which direction they grow in. A plausible reason is that the negatives are many different digits and 3s, and they agree on where ink isn't, while positives disagree on where ink is. I have not checked that.
+The index says *whether* the amplifying regime lasts long enough to matter. It does not say how bad the result is: FN = 0.45 drops further than its index alone would suggest, then partly recovers (Section 8). It also does not explain *why the end state is a blank canvas*, because the theory says errors grow, not which direction they grow in. A plausible reason is that the negatives are many different digits and 3s, and they agree on where ink isn't, while the positives disagree on where ink is. I have not checked that.
 
 ### 7.3 The GRPO runaway was a large-group artifact
 
@@ -353,25 +353,38 @@ Section 5 said sample-dependent errors *allow* reward hacking. It needs one more
 
 Speed is the slope of $\operatorname{logit}p$ against iteration while $0.25<p<0.75$, averaged over two seeds. The symmetry between FP and FN holds everywhere except raw NFT with FN, which is the 7.2 instability. The sizes are less exact. Flow-GRPO loses only 10% of its speed where theory says 29%. The theory assumes the step is proportional to the expected gradient. Flow-GRPO trains with Adam and gradient clipping, and both normalise away much of the gradient's scale, so a smaller $\Delta$ costs less than it would under plain SGD. This explanation is untested. Rerunning with SGD would test it.
 
-## 8. Predictions for the follow-up runs
+## 8. Testing the corrected theory
 
-The corrected theory makes predictions that the main sweep did not test. A follow-up sweep is running (DiffusionNFT, 450 iterations, three seeds each). I'm writing the predictions down before seeing the results:
+The corrected theory makes predictions the main sweep did not test. I wrote these down before running a follow-up sweep of 42 runs (DiffusionNFT without KL, 450 iterations, three seeds each, the same base model and oracle). The follow-up also logs the fraction of blank samples.
 
-<div class="table-scroll" role="region" aria-label="Predictions" tabindex="0">
+<figure>
+<picture><source media="(max-width: 560px)" srcset="/figures/rn-mnist-followup-mobile.svg" /><img src="/figures/rn-mnist-followup.svg" alt="Three panels over 450 iterations. Left: share of 3s for raw-reward DiffusionNFT at FN 0.1, 0.2, 0.3 and 0.45. FN 0.1 and 0.2 rise to about 1. FN 0.3 peaks near 0.58 and falls to 0. FN 0.45 peaks near 0.46, falls to about 0.25, then recovers to 0.4. Middle: at FN=0.3, turning off the negative branch, centring the reward, or normalising it all rise to about 1. Raw reward with beta 0.3 and 0.1 drops earlier. Right: blank-sample fraction. Raw beta 1 goes to 1 after iteration 250. Beta 0.1 goes to 1 around iteration 120 and falls back by 220. Beta 0.3 peaks near 0.5. The three fixes stay at 0." width="1400" height="400" loading="lazy" /></picture>
+<figcaption>Follow-up sweep. Thick lines are means over three seeds; thin lines are individual seeds.</figcaption>
+</figure>
 
-| Block | Run | Prediction from 7.2 |
-| :--- | :--- | :--- |
-| A | raw reward, FN = 0.1, 0.2 | no collapse: $\bar r$ crosses ½ once $p>0.56$ or $0.63$ |
-| A | raw reward, FN = 0.45 | collapse, earlier than FN = 0.3: $\bar r\le0.55$, so it must pass $p=0.91$ to escape |
-| A | all raw runs | the fraction of blank images rises *before* the share of 3s falls |
-| B | negative branch off | no collapse at FN = 0.3: with only the positive branch, $c=1/\beta>0$ always |
-| C | raw reward re-centred per group | no collapse: $\bar r=\tfrac12$ exactly, so $c=0$ |
-| D | $\beta=0.3$, $0.1$ at FN = 0.3 | collapse *sooner*, not later: $c=(2\bar r-1)/\beta$ is more negative, and the stable window $\tfrac12<\bar r<\tfrac12+\beta$ shrinks |
-| E | normalised reward, 450 iterations | stays stable |
+<div class="table-scroll" role="region" aria-label="Predictions and results" tabindex="0">
+
+| Block | Run | Prediction (written before) | Result | |
+| :--- | :--- | :--- | :--- | :---: |
+| A | raw, FN = 0.1, 0.2 | no collapse | 0.94–1.0 at the end in all 6 runs | ✓ |
+| A | raw, FN = 0.3 | collapse | 3/3 collapse to 0.00–0.05, all samples blank | ✓ |
+| A | raw, FN = 0.45 | collapse, earlier than FN = 0.3 | blank-out starts at the same time (it 150–170), reaches 68–94% blank, then partly recovers to 0.34–0.51 | ✗ |
+| A | all raw runs | blank images appear before the share of 3s falls | blank > 5% at it 130–170, decline at it 200–250 | ✓ |
+| B | negative branch off, FN = 0.3 | no collapse | 0.94–0.99, never any blank samples | ✓ |
+| C | group-centred raw $r$, FN = 0.3 | no collapse | 1.00, no blank samples | ✓ |
+| D | raw, $\beta$ = 0.3 and 0.1, FN = 0.3 | collapse sooner | blank-out at it 60–80 for $\beta$ = 0.1, vs 130–170 for $\beta$ = 1; with $\beta$ = 0.3, two of three seeds reach 47% and 99% blank | ✓ (onset) |
+| E | normalised $r$, 450 iterations | stays stable | 0.99 at the end, never below 0.98 after the peak | ✓ |
 
 </div>
 
-Block D is the most informative. The intuitive expectation is that a smaller step size is safer. The theory says the opposite here, because in NFT a smaller $\beta$ means a *larger* effective step.
+The two decisive results are B and C. Removing the negative branch removes the collapse, which shows the push away from false negatives is *necessary*. Re-centring the raw reward within each group, without any std scaling, also removes it, which shows that the average reward sitting below one half is the trigger, not the scale of the reward. Together they rule out the obvious alternative, that raw rewards are simply too large or too noisy. D confirms the counter-intuitive direction: a smaller $\beta$, normally read as a gentler update, blanks out about twice as early.
+
+Two results the corrected theory gets wrong or does not cover:
+
+* **Blank is not always permanent.** With FN = 0.45, and with $\beta$ = 0.1 or 0.3, the model blanks out and then partly comes back. With $\beta$ = 1 and FN = 0.3, blank is absorbing. The theory only says errors grow while $\bar r<\tfrac12$. A guess for the recovery: once almost every sample is blank and gets $r=0$, the negative branch pushes away from *blank* images, which drives the model back toward digits. Whether that escape works seems to depend on $\beta$ and on how much digit-shaped mass is left, and I have no model for it.
+* **The FN = 0.45 timing prediction failed.** I predicted earlier collapse because $\bar r$ stays below ½ longer. Onset was the same as at FN = 0.3. The index tracks how long the amplifying regime lasts, but not how fast the error grows inside it, and that rate evidently depends on more than $\bar r$.
+
+A second generalisation also held up only partly. For $\beta\neq1$ the stability condition is $0<c<2$, so the cumulative index should count both $c<0$ and $c>2$. It orders onset correctly (index above 5 at iteration 20 for $\beta$ = 0.1, 40 for $\beta$ = 0.3, 100–110 for $\beta$ = 1). But it does not predict severity: one $\beta$ = 0.3 seed reaches an index of 10 and stays healthy. It is a warning signal, not a threshold.
 
 ## 9. Summary
 
@@ -379,4 +392,4 @@ Block D is the most informative. The intuitive expectation is that a smaller ste
 * KL regularisation pulls noisy runs back toward the reference. With finite groups, GRPO + KL settles in the order clean > FP > FN, without the runaway the infinite-group analysis predicted.
 * When the reward model ranks a wrong class above the right one, every algorithm follows it.
 * DiffusionNFT's loss optimises a covariance, so at the population level it is just as symmetric in FP and FN as a policy gradient. My odds-ratio prediction was a derivation error.
-* The NFT update also contains a self-consistency term, $(2\bar r-1)\varepsilon/\beta$. With raw rewards whose mean is below one half, it amplifies the model's own errors. False negatives keep the mean down, which is why they, and not false positives, made raw NFT collapse. Group-normalised rewards keep the mean at one half, which is why DiffusionNFT's default is stable.
+* The NFT update also contains a self-consistency term, $(2\bar r-1)\varepsilon/\beta$. With raw rewards whose mean is below one half, it amplifies the model's own errors. False negatives keep the mean down, which is why they, and not false positives, made raw NFT collapse. Group-normalised rewards keep the mean at one half, which is why DiffusionNFT's default is stable. A follow-up sweep tested this: turning off the negative branch, or only centring the reward, removes the collapse, and a smaller β makes it come sooner, all as predicted. What the theory still misses is when the blank state is permanent and how fast the collapse develops.
