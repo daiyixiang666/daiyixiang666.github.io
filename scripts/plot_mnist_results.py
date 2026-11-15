@@ -121,3 +121,32 @@ for mobile in [False, True]:
     save(fig, 'rn-mnist-grids-mobile' if mobile else 'rn-mnist-grids')
 
 print('wrote MNIST figures to', OUT)
+
+# ------------------------------------------------ figure 5: error-amplification index (Section 7.2)
+# c = (2 rbar - 1) / beta with beta = 1; old policy follows at rate 1 - 0.9; one eval = 10 iterations
+pts = []
+for name, run in runs.items():
+    if not name.startswith('nftraw_kl0'):
+        continue
+    L = run['log']
+    R = np.array([r['noisy_reward'] for r in L]); acc = np.array([r['oracle_acc'] for r in L])
+    c = 2 * R - 1
+    amp = np.sum(np.where(c < 0, np.log(np.abs(1 - np.minimum(c, 0))), 0) * 0.1 * 10)
+    peak, fin = acc.max(), acc[-5:].mean()
+    if peak < 0.4:
+        continue                      # never learned 3s (flipped / confused / no-signal runs)
+    pts.append((amp, fin / peak, name))
+for mobile in [False, True]:
+    fig, ax = plt.subplots(figsize=(5, 3.9) if mobile else (6.6, 3.7), layout='constrained')
+    style(ax)
+    for amp, ratio, name in pts:
+        col = RED if 'sym-0_0.3' in name else (GOLD if ratio < 0.95 else BLUE)
+        ax.scatter(amp, ratio, color=col, s=40, zorder=3)
+    ax.scatter([], [], color=BLUE, label='healthy'); ax.scatter([], [], color=GOLD, label='stalled (FP=FN=0.3, seed 1)')
+    ax.scatter([], [], color=RED, label='FN = 0.3 (collapsed)')
+    ax.set_xlabel(r'cumulative amplification  $\sum_{c<0} 0.1\,\log|1-c|$')
+    ax.set_ylabel('final / peak share of 3s'); ax.set_ylim(0, 1.08)
+    ax.set_title('Raw-reward DiffusionNFT runs that learned 3s', fontsize=11)
+    ax.legend(frameon=False, fontsize=9, loc='lower left')
+    save(fig, 'rn-mnist-amp-mobile' if mobile else 'rn-mnist-amp')
+print('wrote amplification figure')

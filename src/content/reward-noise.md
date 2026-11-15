@@ -5,7 +5,7 @@ description: "False positives, false negatives, and what they do to GRPO, Flow-G
 
 Every RL fine-tuning pipeline trusts a reward model that is sometimes wrong. A verifier passes a wrong proof. A classifier calls a 5 a 3. A preference model misses a correct answer and scores it zero. The natural worry is that training will go to the wrong place.
 
-The answer depends on two things: what kind of mistakes the reward model makes, and which algorithm consumes the reward. This article starts from the smallest model where the question can be answered exactly. It then adds the pieces that real systems have: KL regularisation, group-normalised advantages, reward-weighted (negative-aware) updates, many classes, and errors that depend on the sample. At the end, 78 runs on a flow model drawing MNIST digits test the predictions. Most hold, one fails in an instructive way, and one failure mode I expected never appeared.
+The answer depends on two things: what kind of mistakes the reward model makes, and which algorithm consumes the reward. This article starts from the smallest model where the question can be answered exactly. It then adds the pieces that real systems have: KL regularisation, group-normalised advantages, reward-weighted (negative-aware) updates, many classes, and errors that depend on the sample. At the end, 78 runs on a flow model drawing MNIST digits test the predictions. Most hold. The ones that don't are the interesting part: Section 7 traces each miss to a specific simplification in the theory and corrects it.
 
 ## 1. The two-action model
 
@@ -76,7 +76,7 @@ Dividing by the group std rescales every update by roughly $1/s$, where $s=\sqrt
 
 <figure>
 <picture><source media="(max-width: 560px)" srcset="/figures/rn-curves-mobile.svg" /><img src="/figures/rn-curves.svg" alt="Simulated learning curves of P(correct) from 0.1 under clean reward, FP=0.3, FN=0.3 and both, for three update rules. All runs converge to 1. The FP=FN=0.3 curve is slowest in every panel. Under the reward-weighted rule, FP=0.3 is clearly slower than FN=0.3." width="1300" height="400" loading="lazy" /></picture>
-<figcaption>Monte Carlo simulation of the two-action model (64 runs, G = 8, starting from p = 0.1). Every run reaches the correct answer, only at different speeds. Left: group-mean baseline. Middle: GRPO. Right: an idealised reward-weighted update (Section 4b).</figcaption>
+<figcaption>Monte Carlo simulation of the two-action model (64 runs, G = 8, starting from p = 0.1). Every run reaches the correct answer, only at different speeds. Left: group-mean baseline. Middle: GRPO. Right: reward-weighted regression toward π<sub>old</sub>·r, which is how I first (wrongly) modelled DiffusionNFT; see Section 7.1.</figcaption>
 </figure>
 
 The right panel of the next figure measures how many GRPO steps it takes to reach $p=0.95$ over a grid of FP and FN. The contour lines follow the anti-diagonals: what matters is mostly FP + FN, which is $\Delta$ again.
@@ -150,18 +150,7 @@ $$
 
 For a likelihood-ratio style update, false negatives only throw away some good samples. False positives contaminate the positive set. The right panel of the learning-curve figure shows this: FP = 0.3 is visibly slower than FN = 0.3. The middle heat map shows the cost depending mostly on FP.
 
-Two caveats keep this from being the whole story. First, the default DiffusionNFT reward is not the raw $R$. It is the group-normalised advantage mapped into $[0,1]$ by $r=\tfrac12+\tfrac12\operatorname{clip}(A/Z,-1,1)$. Since that map is affine in $R$ within a group, the odds factor becomes $\tfrac{c+d(1-\mathrm{FN})}{c+d\,\mathrm{FP}}$, which is bounded and less asymmetric. Second, the step size $\beta$ and the soft update of $\pi_{\text{old}}$ mean a real iteration takes only a fraction of the full step.
-
-The second caveat can be made precise. Minimising the NFT loss pointwise, and using $\mathbb E[u\mid x_t]=v_{\text{old}}$ for samples drawn from $\pi_{\text{old}}$ (where $u$ is the flow-matching target), gives
-
-$$
-v^*(x_t)=v_{\text{old}}(x_t)+\frac{2}{\beta}\,\bar r(x_t)\,\big(v^+(x_t)-v_{\text{old}}(x_t)\big),
-\qquad \bar r(x_t)=\mathbb E[r\mid x_t].
-$$
-
-The update points toward the positive velocity $v^+$, but its length depends on the local mean reward $\bar r(x_t)$. It lands exactly on $\pi^+$ only when $2\bar r/\beta=1$. With raw rewards, the step size therefore depends on how often the reward model says yes, so FN changes it directly. Normalised rewards keep $\bar r$ near $\tfrac12$.
-
-Most importantly, the odds argument only describes the *population* target. It says nothing about what the negative branch does to a finite network when some negatives are good samples. **The experiment in Section 6 contradicts the prediction of this subsection for raw rewards: false negatives, not false positives, are what break it.**
+This was my prediction before running anything. It is wrong, and not only because of the details. Section 7 shows that the odds-ratio picture misdescribes what the NFT loss actually optimises.
 
 ## 5. Beyond two actions: when noise can be exploited
 
@@ -206,7 +195,7 @@ For Flow-GRPO the toy model's prediction holds almost exactly. FP = 0.3 and FN =
 
 The model does not drift to another digit. It erases its output. At the plateau around iteration 240, about 40% of samples are already blank, and that is where the non-3 mass went. So raw NFT first removed wrong digits by erasing them, then erased the 3s too. KL slows this down but does not prevent it: with KL, the end points are 0.49 and 0.67.
 
-I don't have a derivation for this. Here is the asymmetry that fits the data. In NFT, every sample with $r=0$ is actively pushed *away from*. With false positives, the negative set still contains only wrong digits, so the push is in the right direction. The mistakes only add some wrong digits to the positives, and imitating a sample is a bounded error. With false negatives, a fixed fraction of real 3s are pushed away from on every iteration. A blank canvas is the one image that is far from every negative at once. Normalised rewards centre $r$ within each group, so positives and negatives always carry equal total weight. That is consistent with the normalised variant being stable under the same noise, but it is a hypothesis, not a proof.
+Section 7 derives where this comes from: a term in the NFT update that amplifies the model's own fitting error whenever the average raw reward is below one half.
 
 ### Where the destination moves
 
@@ -242,19 +231,152 @@ I expected the reward from an MLP trained on 300 labels (82% test accuracy) to b
 | Prediction | Result |
 | :--- | :--- |
 | FP and FN with the same $\Delta$ cost the same under policy gradient | holds (Flow-GRPO, NFT-normalised) |
-| FP hurts reward-weighted (raw NFT) updates more than FN | **wrong**: FN makes raw NFT collapse to blank images |
+| FP hurts reward-weighted (raw NFT) updates more than FN | **wrong**: FN makes raw NFT collapse to blank images (Section 7.1–7.2) |
 | $\Delta<0$ learns the wrong answer | holds |
 | A class rewarded more than the target takes over | holds: converges to 8s |
 | KL + noise moves the end point toward the reference | holds |
-| Under GRPO + KL, FN keeps the policy furthest from saturation | ordering holds; the predicted runaway for clean / FP-only does not appear |
-| A weak learned reward gets hacked | does not happen with this reward model |
+| Under GRPO + KL, FN keeps the policy furthest from saturation | ordering holds; the predicted runaway for clean / FP-only does not appear (Section 7.3) |
+| A weak learned reward gets hacked | does not happen with this reward model (Section 7.4) |
 
 </div>
 
-## 7. Summary
+## 7. Why theory and experiment disagreed
 
-* Image-independent noise makes the reward an affine function of the truth, with slope $\Delta=1-\mathrm{FP}-\mathrm{FN}$. As long as $\Delta>0$, policy-gradient methods reach the same answer, slower by about a factor of $\Delta$. On MNIST, Flow-GRPO treats FP and FN almost identically.
-* KL regularisation turns noise into a larger effective $\beta=\beta/\Delta$, so the end point moves toward the reference. Class-dependent errors leave their trace in the KL optimum.
-* When the reward model prefers a wrong class over the right one, every algorithm follows it. No algorithm can recover a ranking the reward does not contain.
-* The population analysis of DiffusionNFT-style updates was the wrong guide. With raw rewards, false negatives feed real good samples into the negative branch, and the model escaped by erasing its output. Normalising the reward within each group, as DiffusionNFT does by default, removed the failure in these runs.
-* The open question from this experiment: when exactly does pushing away from false negatives make a negative-aware method collapse, and how does that depend on the NFT step size β?
+Four predictions missed, in different ways. Each miss traces back to a specific simplification in Sections 2–4. Fixing those simplifications explains the data and makes new predictions that have not been tested yet (Section 8).
+
+<div class="table-scroll" role="region" aria-label="Mismatches" tabindex="0">
+
+| Mismatch | Simplification that caused it | Corrected theory |
+| :--- | :--- | :--- |
+| Raw NFT: FN, not FP, is harmful | treated NFT as "move to $\pi_{\text{old}}\cdot r$" | the NFT optimum is a covariance, so it is symmetric in FP/FN (7.1) |
+| Raw NFT collapses to blank images | assumed the old model fits its own samples exactly | a self-consistency term with coefficient $(2\bar r-1)/\beta$ amplifies errors when $\bar r<\tfrac12$ (7.2) |
+| No GRPO + KL runaway | group size $G\to\infty$ | for finite $G$, the push is bounded and the end point is finite (7.3) |
+| Noise slows Flow-GRPO less than $\Delta$ | plain SGD dynamics | Adam and clipping rescale the gradient (7.5) |
+| Weak reward not hacked | "exploitable in principle" read as "will be exploited" | hacking needs reachable false positives (7.4) |
+
+</div>
+
+### 7.1 NFT optimises a covariance, not a likelihood ratio
+
+Section 4b assumed that one NFT step moves the model to $\pi^+\propto\pi_{\text{old}}\,r$, which multiplies the odds by $(1-\mathrm{FN})/\mathrm{FP}$. Instead, minimise the actual loss pointwise. At a noisy point $x_t$, with flow-matching target $u$, the per-sample loss is
+
+$$
+\ell(v)=r\,\big\|(1-\beta)v_{\text{old}}+\beta v-u\big\|^2+(1-r)\,\big\|(1+\beta)v_{\text{old}}-\beta v-u\big\|^2 .
+$$
+
+Setting the expected gradient to zero gives $\beta v=\mathbb E[(2r-1)u\mid x_t]+(1+\beta-2\bar r)\,v_{\text{old}}$, where $\bar r=\mathbb E[r\mid x_t]$. Now write $\mathbb E[u\mid x_t]=v_{\text{old}}+\varepsilon$, where $\varepsilon(x_t)$ is how far the old model is from the velocity of its *own* samples. Then
+
+$$
+\boxed{\;v^*=v_{\text{old}}+\frac{2}{\beta}\operatorname{Cov}(r,u\mid x_t)+\frac{2\bar r-1}{\beta}\,\varepsilon\;}
+$$
+
+The first correction term is the useful one. A covariance is unchanged by adding a constant to $r$ and scales linearly with a multiplier. Under image-independent noise $r=\mathrm{FP}+\Delta\cdot\mathbb 1[\text{correct}]+\text{noise}$, so
+
+$$
+\operatorname{Cov}(r,u\mid x_t)=\Delta\cdot\operatorname{Cov}(\mathbb 1[\text{correct}],u\mid x_t).
+$$
+
+**At the population level, NFT behaves like a policy gradient: it is slowed by a factor of $\Delta$, and FP and FN are interchangeable.** The odds-ratio table in Section 4b describes reward-weighted regression, which keeps only the positive branch. NFT also has a negative branch, and the two together cancel the constant FP term exactly as a baseline does. This matches the runs without collapse. Normalised NFT slows by 0.78 and 0.79 for FP-only and FN-only, and by 0.41 for both ($\Delta$ = 0.7, 0.7, 0.4). Raw NFT with FP = 0.3 slows by 0.64.
+
+So the first half of the miss was a wrong derivation, not a wrong experiment.
+
+### 7.2 The self-consistency term: why raw rewards with FN collapse
+
+The second term multiplies $\varepsilon$, the model's own fitting error, by $c=(2\bar r-1)/\beta$. After the update, the remaining error is $(c-1)\varepsilon$, so repeated updates
+
+* shrink the error when $0<c<2$, that is $\tfrac12<\bar r<\tfrac12+\beta$;
+* **amplify** it when $c<0$, that is **when the average reward is below one half.**
+
+The intuition is simple. When most samples have $r=0$, the loss mostly pushes *away* from the model's own outputs. Pushing away from your own samples is unlearning, and unlearning has no fixed target. Any error the model has gets reinforced instead of corrected.
+
+Apply this to the runs ($\beta=1$). With raw rewards, $\bar r$ is the fraction of samples the reward model says yes to:
+
+<div class="table-scroll" role="region" aria-label="Mean reward" tabindex="0">
+
+| Noise | $\bar r$ as the share of 3s, $p$, grows | Below ½ while |
+| :--- | :--- | :--- |
+| clean | $p$ | $p<0.5$ (briefly, at the start) |
+| FP = 0.3 | $0.3+0.7p$ | $p<0.29$ |
+| FN = 0.3 | $0.7p$ | $p<0.71$ |
+| FP = FN = 0.3 | $0.3+0.4p$ | $p<0.5$ |
+| normalised / centred $r$ | $\approx 0.5$ for every group | never strongly below |
+
+</div>
+
+FN lowers the ceiling on $\bar r$, so the model has to pass $p=0.71$ before training becomes self-correcting. The FN runs plateaued at $p\approx0.6$, where $\bar r\approx0.42<\tfrac12$, and stayed in the amplifying regime long enough to fall apart. Normalised rewards pin $\bar r\approx\tfrac12$, where $c\approx0$: the error is neither corrected nor amplified, which is why that variant was stable.
+
+To make this quantitative, sum the per-iteration amplification $\log|1-c|$ over all iterations with $c<0$. Weight each by the speed at which $\pi_{\text{old}}$ follows the model ($1-0.9$), using the logged mean reward:
+
+<figure>
+<picture><source media="(max-width: 560px)" srcset="/figures/rn-mnist-amp-mobile.svg" /><img src="/figures/rn-mnist-amp.svg" alt="Scatter of the cumulative error-amplification index against final over peak share of 3s for every raw-reward DiffusionNFT run. Healthy runs sit at an index of 3.3 or less with a ratio near 1. One stalled run is at 3.9. The two FN=0.3 runs are at about 10 with a ratio near 0.3." width="1000" height="560" loading="lazy" /></picture>
+<figcaption>Cumulative amplification index Σ<sub>c&lt;0</sub> 0.1·log|1−c| for every raw-reward DiffusionNFT run, computed from the logged mean reward. The index was defined after seeing the collapse, so this is a consistency check, not a test. Section 8 lists predictions for the follow-up runs.</figcaption>
+</figure>
+
+Every healthy run has an index of at most 3.3. The one stalled run (FP = FN = 0.3, seed 1, stuck at 0.6) is at 3.9. Both collapsed runs are at about 10. The ordering is right, and the gap is large.
+
+What this does not explain is *why the end state is a blank canvas*. The theory says errors grow, not which direction they grow in. A plausible reason is that the negatives are many different digits and 3s, and they agree on where ink isn't, while positives disagree on where ink is. I have not checked that.
+
+### 7.3 The GRPO runaway was a large-group artifact
+
+Section 4a found that with FN = 0 the group std $s\to0$, so the push $\Delta/s$ beats the KL pull. That calculation used the expected std, which is the $G\to\infty$ limit. With a finite group, a group where all samples are correct has *zero* advantage, not an infinite one. Near $p=1$, almost every group is like that. The only groups that push are the ones with a single wrong sample, which occur with probability about $G(1-p)$ and give a push of about $1/\sqrt G$. So the push is about $\sqrt G\,(1-p)$. That is the same order as the KL pull, $\beta(1-p)(\theta-\theta_{\text{ref}})$, so there is a finite end point near $\theta_{\text{ref}}+\sqrt G/\beta$.
+
+Computing the exact expected GRPO update for $G=16$ by enumerating all group outcomes:
+
+<div class="table-scroll" role="region" aria-label="Finite G" tabindex="0">
+
+| $\beta$ | clean, $G{=}\infty$ | clean, $G{=}16$ | FP 0.3, $G{=}\infty$ | FP 0.3, $G{=}16$ | FN 0.3, $G{=}\infty$ | FN 0.3, $G{=}16$ |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 1 (runaway) | 0.996 | 1 (runaway) | 0.946 | 0.744 | 0.708 |
+| 1.0 | 0.571 | 0.535 | 0.424 | 0.399 | 0.445 | 0.423 |
+
+</div>
+
+With $G=16$ nothing runs away, and at moderate $\beta$ the ordering becomes clean > FP > FN. That is the ordering Flow-GRPO + KL showed (0.95 > 0.86 > 0.80), where the infinite-group theory had predicted clean = FP = 1. The FN effect itself survives at finite $G$. What changes is that FP no longer saturates with clean. The bandit's $\beta$ and Flow-GRPO's per-step Gaussian KL are on different scales, so only the ordering can be compared, not the values.
+
+### 7.4 Exploitable is not exploited
+
+Section 5 said sample-dependent errors *allow* reward hacking. It needs one more condition to *happen*: images with high false-positive rate must be reachable by the optimiser before it finds the true target. The weak MLP says "3" for 78% of real 3s but at most 9% of any other digit. Starting from a model that only draws digit-like images, the steepest way up its reward is to draw 3s, which the oracle also accepts. The false positives that exist would require off-manifold images, and 300 small steps from a natural-image prior do not go there. To see hacking, the reward model would need high FP on *on-manifold* images (as in the 8-confusion runs), or training would need to be long and aggressive enough to leave the manifold.
+
+### 7.5 Speed: Δ is the right direction, the optimiser compresses it
+
+<div class="table-scroll" role="region" aria-label="Speed" tabindex="0">
+
+| Logit-speed ratio vs clean | FP 0.3 | FN 0.3 | FP = FN = 0.3 |
+| :--- | ---: | ---: | ---: |
+| $\Delta$ (plain policy gradient) | 0.70 | 0.70 | 0.40 |
+| GRPO, $G=16$, expected dynamics | 0.71 | 0.71 | 0.38 |
+| Flow-GRPO, measured | 0.91 | 0.90 | 0.46 |
+| NFT normalised, measured | 0.78 | 0.79 | 0.41 |
+| NFT raw, measured | 0.64 | collapses | 0.32 |
+
+</div>
+
+Speed is the slope of $\operatorname{logit}p$ against iteration while $0.25<p<0.75$, averaged over two seeds. The symmetry between FP and FN holds everywhere except raw NFT with FN, which is the 7.2 instability. The sizes are less exact. Flow-GRPO loses only 10% of its speed where theory says 29%. The theory assumes the step is proportional to the expected gradient. Flow-GRPO trains with Adam and gradient clipping, and both normalise away much of the gradient's scale, so a smaller $\Delta$ costs less than it would under plain SGD. This explanation is untested. Rerunning with SGD would test it.
+
+## 8. Predictions for the follow-up runs
+
+The corrected theory makes predictions that the main sweep did not test. A follow-up sweep is running (DiffusionNFT, 450 iterations, three seeds each). I'm writing the predictions down before seeing the results:
+
+<div class="table-scroll" role="region" aria-label="Predictions" tabindex="0">
+
+| Block | Run | Prediction from 7.2 |
+| :--- | :--- | :--- |
+| A | raw reward, FN = 0.1, 0.2 | no collapse: $\bar r$ crosses ½ once $p>0.56$ or $0.63$ |
+| A | raw reward, FN = 0.45 | collapse, earlier than FN = 0.3: $\bar r\le0.55$, so it must pass $p=0.91$ to escape |
+| A | all raw runs | the fraction of blank images rises *before* the share of 3s falls |
+| B | negative branch off | no collapse at FN = 0.3: with only the positive branch, $c=1/\beta>0$ always |
+| C | raw reward re-centred per group | no collapse: $\bar r=\tfrac12$ exactly, so $c=0$ |
+| D | $\beta=0.3$, $0.1$ at FN = 0.3 | collapse *sooner*, not later: $c=(2\bar r-1)/\beta$ is more negative, and the stable window $\tfrac12<\bar r<\tfrac12+\beta$ shrinks |
+| E | normalised reward, 450 iterations | stays stable |
+
+</div>
+
+Block D is the most informative. The intuitive expectation is that a smaller step size is safer. The theory says the opposite here, because in NFT a smaller $\beta$ means a *larger* effective step.
+
+## 9. Summary
+
+* Image-independent noise makes the reward an affine function of the truth, with slope $\Delta=1-\mathrm{FP}-\mathrm{FN}$. Policy-gradient methods reach the same answer, and on MNIST Flow-GRPO treats FP and FN almost identically.
+* KL regularisation pulls noisy runs back toward the reference. With finite groups, GRPO + KL settles in the order clean > FP > FN, without the runaway the infinite-group analysis predicted.
+* When the reward model ranks a wrong class above the right one, every algorithm follows it.
+* DiffusionNFT's loss optimises a covariance, so at the population level it is just as symmetric in FP and FN as a policy gradient. My odds-ratio prediction was a derivation error.
+* The NFT update also contains a self-consistency term, $(2\bar r-1)\varepsilon/\beta$. With raw rewards whose mean is below one half, it amplifies the model's own errors. False negatives keep the mean down, which is why they, and not false positives, made raw NFT collapse. Group-normalised rewards keep the mean at one half, which is why DiffusionNFT's default is stable.

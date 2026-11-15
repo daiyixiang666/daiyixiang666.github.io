@@ -121,7 +121,7 @@ for mobile in [False, True]:
     fig, axes = plt.subplots(3 if mobile else 1, 1 if mobile else 3,
                              figsize=(5, 11) if mobile else (13, 3.8), layout='constrained', sharey=True)
     for ax, key, title in zip(axes, ['pg', 'grpo', 'rwr'],
-                              ['mean baseline (no std)', 'GRPO (group std)', 'reward-weighted (NFT-style)']):
+                              ['mean baseline (no std)', 'GRPO (group std)', 'reward-weighted regression']):
         style(ax)
         for fp, fn, c, lab in settings:
             ax.plot(curves[(key, fp, fn)], color=c, lw=2, label=lab)
