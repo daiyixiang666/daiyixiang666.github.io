@@ -232,7 +232,8 @@ def evaluate(model, oracle, rewarder, target, steps, dev, n=1000):
     else:
         div = float('nan')
     return {'oracle_acc': hist[target].item(), 'hist': hist.tolist(), 'noisy_reward': R.mean().item(),
-            'diversity': div}, x[:64]
+            'diversity': div, 'ink': ((x + 1) / 2).mean().item(),
+            'blank_frac': (((x + 1) / 2).mean(dim=(1, 2, 3)) < 0.02).float().mean().item()}, x[:64]
 
 
 def save_grid(x, path):
@@ -407,6 +408,9 @@ def cmd_rl(a):
             R, _ = rewarder(x0)
             if a.nft_reward == 'raw':
                 r = R                                   # binary reward used as optimality probability
+            elif a.nft_reward == 'center':              # raw reward re-centred per group at 0.5, no std scaling
+                Rg = R.view(-1, a.G)
+                r = (Rg - Rg.mean(1, keepdim=True) + 0.5).clamp(0, 1).view(-1)
             else:                                       # DiffusionNFT default: normalised advantage -> [0, 1]
                 A = group_adv(R, a.G)
                 r = 0.5 + 0.5 * (A / a.nft_zmax).clamp(-1, 1)
@@ -427,7 +431,7 @@ def cmd_rl(a):
                     v_neg = (1 + a.nft_beta) * v_old - a.nft_beta * v
                     lpos = ((v_pos - target) ** 2).mean(dim=(1, 2, 3))
                     lneg = ((v_neg - target) ** 2).mean(dim=(1, 2, 3))
-                    loss = (rb * lpos + (1 - rb) * lneg).mean()
+                    loss = (rb * lpos + a.nft_neg_weight * (1 - rb) * lneg).mean()
                     if a.beta > 0:                      # KL-like anchor to the reference velocity
                         with torch.no_grad():
                             v_ref = ref(xt, t)
@@ -465,7 +469,8 @@ def main():
     r.add_argument('--inner', type=int, default=1); r.add_argument('--steps', type=int, default=10)
     r.add_argument('--eta', type=float, default=0.7); r.add_argument('--clip', type=float, default=0.2)
     r.add_argument('--lr', type=float, default=1e-5); r.add_argument('--beta', type=float, default=0.0)
-    r.add_argument('--nft_beta', type=float, default=1.0); r.add_argument('--nft_reward', choices=['raw', 'norm'], default='norm')
+    r.add_argument('--nft_beta', type=float, default=1.0); r.add_argument('--nft_reward', choices=['raw', 'norm', 'center'], default='norm')
+    r.add_argument('--nft_neg_weight', type=float, default=1.0)
     r.add_argument('--nft_zmax', type=float, default=2.0); r.add_argument('--nft_old_ema', type=float, default=0.9)
     r.add_argument('--eval_every', type=int, default=10); r.add_argument('--eval_n', type=int, default=1000)
     r.add_argument('--eval_steps', type=int, default=20)
