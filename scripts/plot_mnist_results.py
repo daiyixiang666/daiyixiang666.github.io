@@ -110,14 +110,20 @@ for mobile in [False, True]:
     save(fig, 'rn-mnist-kl-mobile' if mobile else 'rn-mnist-kl')
 
 # ------------------------------------------------ figure 4: sample grids
-GRIDS = [('flowgrpo_kl0_clean_s0', 'Flow-GRPO, clean'), ('flowgrpo_kl0_confuse-8_0.9_0.3_s0', 'Flow-GRPO, 8 rewarded > 3'),
-         ('flowgrpo_kl0_sym-0.6_0.6_s0', 'Flow-GRPO, flipped (Δ<0)'), ('nftraw_kl0_sym-0_0.3_s0', 'NFT raw, FN=0.3 (collapsed)')]
+GRIDS = [('flowgrpo_kl0_clean_s0', 'Flow-GRPO, clean'),
+         ('flowgrpo_kl0_confuse-8_0.9_0.3_s1', 'Flow-GRPO, 8 rewarded > 3'),
+         ('flowgrpo_kl0_confuse-8_0.9_0.3_s0', 'same, other seed:\n"8" only to the oracle'),
+         ('flowgrpo_kl0_sym-0.6_0.6_s0', 'Flow-GRPO, flipped (Δ<0)'),
+         ('nftraw_kl0_sym-0_0.3_s0', 'NFT raw, FN=0.3 (collapsed)')]
 for mobile in [False, True]:
-    fig, axes = plt.subplots(2 if mobile else 1, 2 if mobile else 4, figsize=(6, 6.6) if mobile else (13, 3.6),
+    fig, axes = plt.subplots(3 if mobile else 1, 2 if mobile else 5, figsize=(6, 9.6) if mobile else (16, 3.8),
                              layout='constrained')
-    for ax, (name, title) in zip(np.ravel(axes), GRIDS):
+    flat = np.ravel(axes)
+    for ax in flat:
+        ax.axis('off')
+    for ax, (name, title) in zip(flat, GRIDS):
         ax.imshow(mpimg.imread(EXP / 'grids' / f'{name}.png'), interpolation='nearest')
-        ax.set_title(title, fontsize=10); ax.axis('off')
+        ax.set_title(title, fontsize=10)
     save(fig, 'rn-mnist-grids-mobile' if mobile else 'rn-mnist-grids')
 
 print('wrote MNIST figures to', OUT)
